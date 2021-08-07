@@ -1,6 +1,7 @@
 import ForwardRefDemo from "./forward-ref";
 import ContextDemo from "./context";
 import ConcurrentDemo from "./concurrent-mode";
+import ChildrenDemo from "./children";
 import "./App.css";
 import React from "react";
 
@@ -16,6 +17,8 @@ class App extends React.Component {
         return <ContextDemo />;
       case "concurrent":
         return <ConcurrentDemo />;
+      case "children":
+        return <ChildrenDemo />;
       default:
         return "Not Found";
     }
@@ -44,6 +47,9 @@ class App extends React.Component {
           </p>
           <p>
             <a href="#concurrent"> ConcurrentMode Demo </a>
+          </p>
+          <p>
+            <a href="#children"> Children Demo </a>
           </p>
         </header>
         <section className="App-body">{this.renderBody(identifier)}</section>

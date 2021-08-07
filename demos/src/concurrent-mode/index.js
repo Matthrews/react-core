@@ -1,14 +1,19 @@
-import React, { version } from "react";
+import React, {
+  version,
+  unstable_ConcurrentMode as ConcurrentMode,
+  Suspense,
+} from "react";
 import { flushSync } from "react-dom";
 import "./index.css";
 
-console.log("React", version);
+console.log("React", version, ConcurrentMode, Suspense);
+// React 16.7.0 Symbol(react.concurrent_mode) Symbol(react.suspense)
 
 class Parent extends React.Component {
   state = {
     async: true,
     num: 1,
-    length: 200,
+    length: 2000,
   };
 
   componentDidMount() {
@@ -51,15 +56,17 @@ class Parent extends React.Component {
     }
 
     return (
-      <div className="main">
-        async:
-        <input
-          type="checkbox"
-          value={async}
-          onChange={() => flushSync(() => this.setState({ async: false }))}
-        />
-        <div className="wrapper">{children}</div>
-      </div>
+      <ConcurrentMode>
+        <div className="main">
+          async:
+          <input
+            type="checkbox"
+            value={async}
+            onChange={() => flushSync(() => this.setState({ async: false }))}
+          />
+          <div className="wrapper">{children}</div>
+        </div>
+      </ConcurrentMode>
     );
   }
 }

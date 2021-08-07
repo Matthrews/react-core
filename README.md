@@ -2,7 +2,9 @@
 
 react 核心解析
 
-> react@16.6.0
+> 本次分享源码版本react@16.6.0和@16.7.0
+
+> 注：本此分享更多的是源码，概念性的东西读者可自行查阅官网文档或者 YouTube React Conference
 
 ## 代码结构
 
@@ -10,7 +12,7 @@ react 核心解析
 
 React.createElement, 入参 type, config, children，返回一个对象
 
-## API
+## API 源码
 
 ```js
 // packages\react\src\React.js
@@ -430,6 +432,342 @@ export function createContext<T>(
 
 之前是 AsyncMode
 react@16 之后提出的一种优先级策略，它使得 react 的渲染是可以中断的, 从而可以操作渲染调度，最终让渲染更加流畅
+
+案列可以参考 demo
+
 ```js
-// 
+// packages\react\src\React.js
+...
+// unstable_ConcurrentMode只是一个Symbol
+unstable_ConcurrentMode: REACT_CONCURRENT_MODE_TYPE,
+...
 ```
+
+### Suspense
+
+> 参考：[React 的未来：与 Suspense 共舞](https://www.infoq.cn/article/sVaeA7Y3pei2sYy_lK9e)
+
+- React Suspense 是组件从缓存中加载数据时暂停呈现的一种通行方法。它解决的问题：渲染是和 I/O 绑定时的情况。
+
+- 支持 lazy, 此时 lazy 的组件会被 webpack 进行代码分割处理
+
+```js
+function MyComponent() {
+  return (
+    // 在包裹的异步组件全部加载完毕之后Spinner才消失
+    <React.Suspense fallback={<Spinner />}>
+      <LazyComponent />
+      <LazyComponent2 />
+    </React.Suspense>
+  );
+}
+```
+
+```js
+// packages\react\src\React.js
+...
+// Suspense只是一个Symbol
+Suspense: REACT_SUSPENSE_TYPE,
+...
+
+// packages\react\src\React.js
+import {lazy} from './ReactLazy';
+
+// packages\react\src\ReactLazy.js
+// 是一个函数，接受一个thenable函数
+export function lazy<T, R>(ctor: () => Thenable<T, R>): LazyComponent<T> {
+  return {
+    $$typeof: REACT_LAZY_TYPE,
+    _ctor: ctor,
+    // React uses these fields to store the result.
+    _status: -1,
+    _result: null,
+  };
+}
+```
+
+> Suspense 只是一个 Symbol
+
+> 新的问题： 一个 Symbol 是如何承载元素的？
+
+### Hook
+
+> [Hook 简介](https://reactjs.org/docs/hooks-intro.html)
+
+> react@16.7.0
+
+```js
+// packages\react\src\React.js
+if (enableHooks) {
+  React.useCallback = useCallback;
+  React.useContext = useContext;
+  React.useEffect = useEffect;
+  React.useImperativeMethods = useImperativeMethods;
+  React.useLayoutEffect = useLayoutEffect;
+  React.useMemo = useMemo;
+  React.useReducer = useReducer;
+  React.useRef = useRef;
+  React.useState = useState;
+}
+
+// packages\react\src\ReactHooks.js
+
+export function useState<S>(initialState: (() => S) | S) {
+  const dispatcher = resolveDispatcher();
+  return dispatcher.useState(initialState);
+}
+
+export function useEffect(
+  create: () => mixed,
+  inputs: Array<mixed> | void | null
+) {
+  const dispatcher = resolveDispatcher();
+  return dispatcher.useEffect(create, inputs);
+}
+
+// 这一步是在dom渲染的时候才拿到的
+function resolveDispatcher() {
+  const dispatcher = ReactCurrentOwner.currentDispatcher;
+  return dispatcher;
+}
+
+// 渲染的时候从不同平台传进来的全局对象
+const ReactCurrentOwner = {
+  current: (null: null | Fiber),
+  currentDispatcher: (null: null | Dispatcher),
+};
+```
+
+> hooks 都挂载在 ReactCurrentOwner 全局对象上
+
+> 新的问题： ReactCurrentOwner 是什么
+
+### Children
+
+```js
+// packages\react\src\React.js
+import { forEach, map, count, toArray, only } from "./ReactChildren";
+const React = {
+  Children: {
+    map, // 和普通数组map区别在于最终结果是一维数组，不管你怎么嵌套
+    forEach,
+    count,
+    toArray,
+    only,
+  },
+  // ...
+};
+
+// packages\react\src\ReactChildren.js
+function mapChildren(children, func, context) {
+  if (children == null) {
+    return children;
+  }
+  const result = [];
+  mapIntoWithKeyPrefixInternal(children, result, null, func, context);
+  return result;
+}
+```
+
+mapChildren 的处理流程如下图：
+![mapChildren](https://cdn.jsdelivr.net/gh/Matthrews/zm_cdn/images/mapChildren.png)
+
+看懂流程图我们再深入源码
+
+```js
+// packages\react\src\ReactChildren.js
+function mapIntoWithKeyPrefixInternal(children, array, prefix, func, context) {
+  let escapedPrefix = "";
+  if (prefix != null) {
+    escapedPrefix = escapeUserProvidedKey(prefix) + "/";
+  }
+  const traverseContext = getPooledTraverseContext(
+    array,
+    escapedPrefix,
+    func,
+    context
+  );
+  traverseAllChildren(children, mapSingleChildIntoContext, traverseContext);
+  releaseTraverseContext(traverseContext);
+}
+
+// mapSingleChildIntoContext
+function mapSingleChildIntoContext(bookKeeping, child, childKey) {
+  // bookKeeping就是从对象池里面取出来的traverseContext
+  const { result, keyPrefix, func, context } = bookKeeping;
+
+  let mappedChild = func.call(context, child, bookKeeping.count++);
+  if (Array.isArray(mappedChild)) {
+    // 外层递归，此时对象池的作用就体现出来了
+    mapIntoWithKeyPrefixInternal(mappedChild, result, childKey, (c) => c);
+  } else if (mappedChild != null) {
+    if (isValidElement(mappedChild)) {
+      // cloneAndReplaceKey
+      mappedChild = cloneAndReplaceKey(
+        mappedChild,
+        // Keep both the (mapped) and old keys if they differ, just as
+        // traverseAllChildren used to do for objects as children
+        keyPrefix +
+          (mappedChild.key && (!child || child.key !== mappedChild.key)
+            ? escapeUserProvidedKey(mappedChild.key) + "/"
+            : "") +
+          childKey
+      );
+    }
+    result.push(mappedChild);
+  }
+}
+
+// traverseAllChildren
+function traverseAllChildren(children, callback, traverseContext) {
+  if (children == null) {
+    return 0;
+  }
+
+  return traverseAllChildrenImpl(children, "", callback, traverseContext);
+}
+
+// traverseAllChildrenImpl
+function traverseAllChildrenImpl(
+  children,
+  nameSoFar,
+  callback,
+  traverseContext
+) {
+  const type = typeof children;
+
+  if (type === "undefined" || type === "boolean") {
+    // All of the above are perceived as null.
+    children = null;
+  }
+
+  let invokeCallback = false;
+
+  if (children === null) {
+    invokeCallback = true;
+  } else {
+    switch (type) {
+      case "string":
+      case "number":
+        invokeCallback = true;
+        break;
+      case "object":
+        switch (children.$$typeof) {
+          case REACT_ELEMENT_TYPE:
+          case REACT_PORTAL_TYPE:
+            invokeCallback = true;
+        }
+    }
+  }
+
+  if (invokeCallback) {
+    callback(
+      traverseContext,
+      children,
+      // If it's the only child, treat the name as if it was wrapped in an array
+      // so that it's consistent if the number of children grows.
+      nameSoFar === "" ? SEPARATOR + getComponentKey(children, 0) : nameSoFar
+    );
+    return 1;
+  }
+
+  let child;
+  let nextName;
+  let subtreeCount = 0; // Count of children found in the current subtree.
+  const nextNamePrefix =
+    nameSoFar === "" ? SEPARATOR : nameSoFar + SUBSEPARATOR;
+
+  if (Array.isArray(children)) {
+    // 开始递归调用
+    for (let i = 0; i < children.length; i++) {
+      child = children[i];
+      nextName = nextNamePrefix + getComponentKey(child, i);
+      subtreeCount += traverseAllChildrenImpl(
+        child,
+        nextName,
+        callback,
+        traverseContext
+      );
+    }
+  } else {
+    const iteratorFn = getIteratorFn(children);
+    if (typeof iteratorFn === "function") {
+      const iterator = iteratorFn.call(children);
+      let step;
+      let ii = 0;
+      while (!(step = iterator.next()).done) {
+        child = step.value;
+        nextName = nextNamePrefix + getComponentKey(child, ii++);
+        subtreeCount += traverseAllChildrenImpl(
+          child,
+          nextName,
+          callback,
+          traverseContext
+        );
+      }
+    }
+  }
+
+  return subtreeCount;
+}
+
+const POOL_SIZE = 10;
+// 对象池
+// mapFunction可能会频繁调用，对象频繁声明释放会很消耗内存，使用对象池保存对象引用，重复利用减少内存创建回收开销
+// React合成事件系统中也用到了对象池进行性能优化
+// 正常情况下对象池里面只有一个对象，但是如果像下面这样调用的时候对象池里面就不止一个了，真正的效果也就开始体现出来了
+// React.Children.map(props.children, (c) => [c, [c, [c, c]]])  对象池里面有三个
+const traverseContextPool = [];
+// getPooledTraverseContext
+function getPooledTraverseContext(
+  mapResult,
+  keyPrefix,
+  mapFunction,
+  mapContext
+) {
+  if (traverseContextPool.length) {
+    const traverseContext = traverseContextPool.pop();
+    traverseContext.result = mapResult;
+    traverseContext.keyPrefix = keyPrefix;
+    traverseContext.func = mapFunction;
+    traverseContext.context = mapContext;
+    traverseContext.count = 0;
+    return traverseContext;
+  } else {
+    return {
+      result: mapResult,
+      keyPrefix: keyPrefix,
+      func: mapFunction,
+      context: mapContext,
+      count: 0,
+    };
+  }
+}
+
+// releaseTraverseContext
+function releaseTraverseContext(traverseContext) {
+  traverseContext.result = null;
+  traverseContext.keyPrefix = null;
+  traverseContext.func = null;
+  traverseContext.context = null;
+  traverseContext.count = 0;
+  if (traverseContextPool.length < POOL_SIZE) {
+    traverseContextPool.push(traverseContext);
+  }
+}
+```
+
+> 两层递归，最终返回一维数组
+> 学到一个优化： 对象池 pool
+
+### 其他
+
+- memo
+
+- Fragment StrictMode
+
+- cloneElement createFactory
+
+### 总结
+
+React 只是创建了一些 DOM 节点，以及一些 ref 等，并没有具体的操作，好像是一个空壳子，而 React-DOM 和 React-Native 才是具体实现

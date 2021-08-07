@@ -7,7 +7,7 @@
     width: 380px;
     padding: 32px;
 
-    animation: move 1s infinite alternate;
+    animation: move 5s infinite alternate;
 }
 
 .main .wrapper .item {
