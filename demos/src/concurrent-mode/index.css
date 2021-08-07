@@ -1,0 +1,29 @@
+.main {}
+
+.main .wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+    width: 380px;
+    padding: 32px;
+
+    animation: move 1s infinite alternate;
+}
+
+.main .wrapper .item {
+    width: 20px;
+    height: 20px;
+    border: 1px solid #ddd;
+    background: red;
+    color: black;
+}
+
+@keyframes move {
+    0% {
+        transform: translateX(0);
+    }
+
+    100% {
+        transform: translateX(200px);
+    }
+}

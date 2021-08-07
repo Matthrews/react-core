@@ -306,3 +306,130 @@ export function createRef(): RefObject {
 ```
 
 > 新问题：Component 和 createRef 中 ref 后续是如何使用的
+
+### Context
+
+两种使用方式，childContextType(即将在 react@17 版本中废弃), createContext
+
+```js
+// demos\src\context\index.js
+import React from "react";
+import PropTypes from "prop-types";
+
+const { Provider, Consumer } = React.createContext();
+
+class Parent extends React.Component {
+  state = {
+    childContext: "123",
+    newContext: "456",
+  };
+
+  getChildContext() {
+    return { value: this.state.childContext };
+  }
+
+  render() {
+    return (
+      <>
+        <div>
+          <label>childContext: </label>
+          <input
+            type="text"
+            value={this.state.childContext}
+            onChange={(e) => this.setState({ childContext: e.target.value })}
+          />
+
+          <br />
+          <br />
+          <label>newContext: </label>
+          <input
+            type="text"
+            value={this.state.newContext}
+            onChange={(e) => this.setState({ newContext: e.target.value })}
+          />
+
+          <Provider value={this.state.newContext}>
+            {this.props.children}
+          </Provider>
+        </div>
+      </>
+    );
+  }
+}
+
+function Child1() {
+  return <Consumer>{(value) => <p>newContext: {value}</p>}</Consumer>;
+}
+
+class Child2 extends React.Component {
+  render() {
+    return <p>childContext: {this.context.value}</p>;
+  }
+}
+
+// 务必申明，否则拿不到
+Child2.contextTypes = {
+  value: PropTypes.string,
+};
+// 务必申明，否则报错
+Parent.childContextTypes = {
+  value: PropTypes.string,
+};
+
+const Demo = () => {
+  return (
+    <Parent>
+      <Child1 />
+      <Child2 />
+    </Parent>
+  );
+};
+
+export default Demo;
+```
+
+再看看源码
+
+```js
+// packages\react\src\ReactElement.js
+import { createContext } from "./ReactContext";
+
+// packages\react\src\ReactContext.js
+export function createContext<T>(
+  defaultValue: T,
+  calculateChangedBits: ?(a: T, b: T) => number
+): ReactContext<T> {
+  const context: ReactContext<T> = {
+    $$typeof: REACT_CONTEXT_TYPE,
+    // As a workaround to support multiple concurrent renderers, we categorize
+    // some renderers as primary and others as secondary. We only expect
+    // there to be two concurrent renderers at most: React Native (primary) and
+    // Fabric (secondary); React DOM (primary) and React ART (secondary).
+    // Secondary renderers store their context values on separate fields.
+    // 两个变量值相同，是同的地方不同而已
+    _currentValue: defaultValue,
+    _currentValue2: defaultValue,
+    // These are circular
+    Provider: (null: any),
+    Consumer: (null: any),
+  };
+
+  context.Provider = {
+    $$typeof: REACT_PROVIDER_TYPE,
+    _context: context,
+  };
+
+  // 又指向了自己，意味着Consumer还可以是Provider继续向下无限传递
+  context.Consumer = context;
+
+  return context;
+}
+```
+
+### ConcurrentMode
+
+之前是 AsyncMode
+react@16 之后提出的一种优先级策略，它使得 react 的渲染是可以中断的, 从而可以操作渲染调度，最终让渲染更加流畅
+```js
+// 
+```

@@ -1,0 +1,17 @@
+.App {
+  display: flex;
+  /* flex-flow: column nowrap; */
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  height: 90vh;
+}
+
+.App>.App-header {
+  flex: 1;
+  border-right: 1px solid #ddd;
+}
+
+.App>.App-body {
+  flex: 3;
+}

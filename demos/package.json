@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "react": "16.6.0"
+  },
+  "devDependencies": {
+    "@types/react": "^16.4.18"
+  }
+}
