@@ -2,6 +2,7 @@ import ForwardRefDemo from "./forward-ref";
 import ContextDemo from "./context";
 import ConcurrentDemo from "./concurrent-mode";
 import ChildrenDemo from "./children";
+import BatchedDemo from "./batchedUpdates";
 import "./App.css";
 import React from "react";
 
@@ -19,6 +20,8 @@ class App extends React.Component {
         return <ConcurrentDemo />;
       case "children":
         return <ChildrenDemo />;
+      case "batched":
+        return <BatchedDemo />;
       default:
         return "Not Found";
     }
@@ -50,6 +53,9 @@ class App extends React.Component {
           </p>
           <p>
             <a href="#children"> Children Demo </a>
+          </p>
+          <p>
+            <a href="#batched"> BatchedUpdates Demo </a>
           </p>
         </header>
         <section className="App-body">{this.renderBody(identifier)}</section>
